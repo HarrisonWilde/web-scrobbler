@@ -2,14 +2,11 @@ export {};
 
 Connector.playerSelector = '#react-root';
 
-document.body.insertAdjacentHTML(
-	'beforeend',
-	'<div id="nts-live-tracklist" style="display: none;"></div>',
-);
-
 let live: boolean | null = null;
-let artist: string | null = null;
-let track: string | null = null;
+let songInfo: {
+	artist: string | null;
+	track: string | null;
+} | null = null;
 
 Connector.isPlaying = () => {
 	live = document.querySelector('.live-channel--playing') !== null;
@@ -25,27 +22,43 @@ Connector.isPlaying = () => {
 	return false;
 };
 
-function loadTracklist() {
-	fetch(
-		'https://mysterious-journey-91752-edf28ad9f51e.herokuapp.com/https://nts.live/live-tracklist/1',
-	)
-		.then((res) => res.text())
-		.then((text) => {
-			const element = document.getElementById('nts-live-tracklist');
-			if (element) {
-				element.innerHTML = text;
-			}
-		});
+async function requestSongInfo() {
+	setInterval(async () => {
+		songInfo = await fetchSongInfo();
+	}, 10000);
+}
+
+async function fetchSongInfo() {
+	let artist = null;
+	let track = null;
+	const response = await Util.fetchFromServiceWorker(
+		'https://nts.live/live-tracklist/1',
+		'text',
+	);
+	if (response.ok) {
+		const result = response.content;
+		const doc = new DOMParser().parseFromString(result, 'text/html');
+		const artistElement = doc.querySelector(
+			'.page-live-tracks__list li:first-child .page-live-tracks__artist-title',
+		);
+		if (artistElement) {
+			artist = artistElement.textContent;
+		}
+		const trackElement = doc.querySelector(
+			'.page-live-tracks__list li:first-child .page-live-tracks__song-title',
+		);
+		if (trackElement) {
+			track = trackElement.textContent;
+		}
+	}
+	return { artist, track };
 }
 
 Connector.getArtistTrack = () => {
+	let artist = null;
+	let track = null;
 	if (live) {
-		artist = document.querySelector(
-			'.page-live-tracks__list li:first-child .page-live-tracks__artist-title',
-		)?.textContent;
-		track = document.querySelector(
-			'.page-live-tracks__list li:first-child .page-live-tracks__song-title',
-		)?.textContent;
+		requestSongInfo();
 	} else {
 		const artistElement = document.querySelector(
 			'.episode-player-tracklist__track--is-playing .episode-player-tracklist__artist',
@@ -59,8 +72,9 @@ Connector.getArtistTrack = () => {
 		if (trackElement) {
 			track = trackElement.textContent;
 		}
+		songInfo = { artist, track };
 	}
-	return { artist, track };
+	return songInfo;
 };
 
 Connector.scrobbleInfoLocationSelector = live
